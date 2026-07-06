@@ -50,10 +50,10 @@ export class Missile extends Phaser.Physics.Arcade.Image {
       this.disableBody(true, true);
       return;
     }
-    const speed = this.owner === 'player' ? 430 : age < 650 ? 135 : 250;
+    const speed = this.owner === 'player' ? 430 : age < 520 ? 170 : 315;
     const desired = new Phaser.Math.Vector2(this.target.x - this.x, this.target.y - this.y).normalize().scale(speed);
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const turnRate = this.owner === 'player' ? 0.16 : 0.075;
+    const turnRate = this.owner === 'player' ? 0.16 : 0.095;
     const turn = turnRate * delta;
     body.velocity.lerp(desired, Math.min(this.owner === 'player' ? 0.18 : 0.09, turn / 1000));
     this.rotation = body.velocity.angle() + Math.PI / 2;

@@ -36,13 +36,15 @@ export class GameScene extends Phaser.Scene {
   private ended = false;
   private pauseLayer?: Phaser.GameObjects.Container;
   private skillButton?: Phaser.GameObjects.Container;
+  private difficulty: 'normal' | 'hard' = 'normal';
 
   constructor() {
     super('GameScene');
   }
 
-  create(): void {
+  create(data?: { difficulty?: 'normal' | 'hard' }): void {
     this.ended = false;
+    this.difficulty = data?.difficulty === 'hard' ? 'hard' : 'normal';
     this.game.canvas.focus();
     this.startedAt = this.time.now;
     this.soundSystem = new SoundSystem(this);
@@ -52,6 +54,10 @@ export class GameScene extends Phaser.Scene {
     this.background = this.add.tileSprite(360, 640, 720, 1280, 'background_stage01_canyon');
     this.add.rectangle(360, 640, 720, 1280, 0x06101e, 0.18).setDepth(1);
     this.player = new Player(this, 360, 1090);
+    if (this.difficulty === 'hard') {
+      this.player.hp = Math.max(2, this.player.hp - 1);
+      this.player.weaponLevel = 2;
+    }
     this.add.image(this.player.x, this.player.y, 'fx_sheet', 'fx_player_shield').setName('player_shield').setDepth(29).setDisplaySize(118, 118).setVisible(false);
     this.inputSystem = new InputSystem(this);
     this.createGroups();
@@ -120,8 +126,13 @@ export class GameScene extends Phaser.Scene {
     if (this.enemies.countActive(true) >= WeaponSystem.activeEnemyLimit) return;
     const enemy = this.enemies.get(x, -70) as Enemy | null;
     if (!enemy) return;
-    enemy.spawn(kind, x, -70, this.player);
+    enemy.spawn(kind, x, -70, this.player, this.difficulty === 'hard' ? 1.22 : 1);
     this.score.registerSpawn();
+    if (this.difficulty === 'hard' && Phaser.Math.Between(0, 100) < 16 && this.enemies.countActive(true) < WeaponSystem.activeEnemyLimit) {
+      const escort = this.enemies.get(Phaser.Math.Clamp(720 - x, 70, 650), -105) as Enemy | null;
+      escort?.spawn('interceptor_drone', Phaser.Math.Clamp(720 - x, 70, 650), -105, this.player, 1.12);
+      if (escort) this.score.registerSpawn();
+    }
   }
 
   private spawnPickup(kind: PickupKind, x: number, y = -40): void {
@@ -299,6 +310,10 @@ export class GameScene extends Phaser.Scene {
     localStorage.setItem('gulf-fireline-best', String(bestScore));
     const stats: ResultStats = {
       outcome,
+      mode: this.difficulty === 'hard' ? 'stage01_hard' : 'stage01',
+      modeName: this.difficulty === 'hard' ? `${stage01.displayName} 高压` : stage01.displayName,
+      retryScene: 'GameScene',
+      retryData: { difficulty: this.difficulty },
       score: this.score.score,
       bestScore,
       kills: this.score.kills,

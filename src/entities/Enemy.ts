@@ -12,11 +12,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private config: EnemyConfig = enemies.patrol_drone;
   private nextFireAt = 0;
   private drift = 0;
+  private threatLevel = 1;
 
-  spawn(kind: EnemyKind, x: number, y: number, player: Player): void {
+  spawn(kind: EnemyKind, x: number, y: number, player: Player, threatLevel = 1): void {
     this.kind = kind;
     this.config = enemies[kind];
-    this.hp = this.config.hp;
+    this.threatLevel = threatLevel;
+    this.hp = Math.ceil(this.config.hp * threatLevel);
     this.scoreValue = this.config.score;
     this.drift = Phaser.Math.FloatBetween(-1, 1);
     if (kind === 'sam_launcher') {
@@ -31,14 +33,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setSize(size.width * 0.78, size.height * 0.72, true);
     body.setOffset((this.width - body.width) / 2, (this.height - body.height) / 2);
-    this.nextFireAt = this.scene.time.now + this.config.fireIntervalMs + Phaser.Math.Between(0, 450);
+    this.nextFireAt = this.scene.time.now + this.config.fireIntervalMs / threatLevel + Phaser.Math.Between(0, 450);
     if (kind === 'interceptor_drone') {
-      const v = new Phaser.Math.Vector2(player.x - x, player.y - y).normalize().scale(this.config.speed);
+      const v = new Phaser.Math.Vector2(player.x - x, player.y - y).normalize().scale(this.config.speed * Math.sqrt(threatLevel));
       body.setVelocity(v.x, v.y);
     } else if (kind === 'light_fighter') {
-      body.setVelocity(x < 360 ? 100 : -100, this.config.speed);
+      body.setVelocity(x < 360 ? 100 * threatLevel : -100 * threatLevel, this.config.speed * Math.sqrt(threatLevel));
     } else {
-      body.setVelocity(0, this.config.speed);
+      body.setVelocity(0, this.config.speed * Math.sqrt(threatLevel));
     }
   }
 
@@ -51,7 +53,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     if (this.config.fireIntervalMs > 0 && time >= this.nextFireAt) {
       this.fire(time, bullets, missiles, player);
-      this.nextFireAt = time + this.config.fireIntervalMs;
+      this.nextFireAt = time + this.config.fireIntervalMs / this.threatLevel;
     }
     if (this.y > 1380 || this.x < -120 || this.x > 840) this.disableBody(true, true);
   }
@@ -79,13 +81,30 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       });
       return;
     }
-    const patterns = this.kind === 'aa_cannon' ? [-0.42, 0, 0.42] : this.kind === 'light_fighter' ? [-0.22, 0.22] : [0];
-    patterns.forEach((angle) => {
+    const baseAngle = Phaser.Math.Angle.Between(this.x, this.y + 30, player.x, player.y);
+    const patterns = this.patternForKind();
+    const speed = this.bulletSpeedForKind();
+    patterns.forEach((angleOffset) => {
       const bullet = bullets.get(this.x, this.y + 30, 'fx_sheet', 'bullet_enemy_red') as Bullet | null;
-      const speed = 260;
-      bullet?.fire(this.x, this.y + 30, Math.sin(angle) * speed, Math.cos(angle) * speed, 'enemy', 1);
+      const angle = baseAngle + angleOffset;
+      bullet?.fire(this.x, this.y + 30, Math.cos(angle) * speed, Math.sin(angle) * speed, 'enemy', 1);
     });
     this.scene.events.emit('enemy-fire');
+  }
+
+  private patternForKind(): number[] {
+    if (this.kind === 'aa_cannon') return [-0.48, -0.24, 0, 0.24, 0.48];
+    if (this.kind === 'light_fighter') return [-0.22, 0, 0.22];
+    if (this.kind === 'interceptor_drone') return [-0.12, 0.12];
+    return [0];
+  }
+
+  private bulletSpeedForKind(): number {
+    const scale = Math.sqrt(this.threatLevel);
+    if (this.kind === 'aa_cannon') return 340 * scale;
+    if (this.kind === 'light_fighter') return 390 * scale;
+    if (this.kind === 'interceptor_drone') return 360 * scale;
+    return 320 * scale;
   }
 
   private displaySizeFor(kind: EnemyKind): { width: number; height: number } {

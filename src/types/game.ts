@@ -6,8 +6,14 @@ export type PickupKind = 'power' | 'missile' | 'repair' | 'shield' | 'multiplier
 
 export type GameOutcome = 'victory' | 'defeat';
 
+export type GameMode = 'stage01' | 'stage01_hard' | 'hell10';
+
 export interface ResultStats {
   outcome: GameOutcome;
+  mode?: GameMode;
+  modeName?: string;
+  retryScene?: string;
+  retryData?: Record<string, unknown>;
   score: number;
   bestScore: number;
   kills: number;

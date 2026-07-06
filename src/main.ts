@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
+import { HellChallengeScene } from './scenes/HellChallengeScene';
 import { MenuScene } from './scenes/MenuScene';
 import { ResultScene } from './scenes/ResultScene';
 import './styles.css';
@@ -22,7 +23,7 @@ const config: Phaser.Types.Core.GameConfig = {
       fps: 60
     }
   },
-  scene: [BootScene, MenuScene, GameScene, ResultScene],
+  scene: [BootScene, MenuScene, GameScene, HellChallengeScene, ResultScene],
   input: {
     activePointers: 3
   }
