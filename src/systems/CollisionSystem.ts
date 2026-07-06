@@ -10,6 +10,8 @@ import { ScoreSystem } from './ScoreSystem';
 export class CollisionSystem {
   private boss?: Boss;
   private onBossKilled?: () => void;
+  private readonly lethalPlayerHits: boolean;
+  private readonly lethalPlayerRadius: number;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -22,8 +24,12 @@ export class CollisionSystem {
     private readonly pickups: Phaser.Physics.Arcade.Group,
     private readonly score: ScoreSystem,
     private readonly onExplosion: (x: number, y: number, big?: boolean) => void,
-    private readonly onDefeat: () => void
-  ) {}
+    private readonly onDefeat: () => void,
+    options?: { lethalPlayerHits?: boolean; lethalPlayerRadius?: number }
+  ) {
+    this.lethalPlayerHits = options?.lethalPlayerHits ?? false;
+    this.lethalPlayerRadius = options?.lethalPlayerRadius ?? Math.max(this.player.displayWidth, this.player.displayHeight) * 0.42;
+  }
 
   bind(): void {
     this.scene.physics.add.overlap(this.player, this.enemyBullets, (_player, bullet) => this.hitPlayer(bullet as Bullet));
@@ -45,6 +51,7 @@ export class CollisionSystem {
     this.checkPlayerMissilesAgainstEnemies();
     this.checkPlayerMissilesAgainstBoss();
     this.checkPlayerAgainstPickups();
+    if (this.lethalPlayerHits) this.checkLethalThreatsAgainstPlayer();
   }
 
   private hitEnemy(projectile: Bullet | Missile, enemy: Enemy): void {
@@ -144,6 +151,14 @@ export class CollisionSystem {
     if (!source.active) return;
     if (source instanceof Missile && source.owner !== 'enemy') return;
     if ('disableBody' in source) source.disableBody(true, true);
+    if (this.lethalPlayerHits) {
+      this.player.hp = 0;
+      this.score.registerHit();
+      this.scene.events.emit('player-hit');
+      this.scene.cameras.main.shake(170, 0.006);
+      this.onDefeat();
+      return;
+    }
     const wasHit = this.player.takeHit(this.scene.time.now);
     if (!wasHit) {
       this.scene.events.emit('player-shield');
@@ -171,6 +186,36 @@ export class CollisionSystem {
       const playerRadius = Math.max(this.player.displayWidth, this.player.displayHeight) * 0.3;
       if (Phaser.Math.Distance.Between(this.player.x, this.player.y, pickup.x, pickup.y) <= pickupRadius + playerRadius) {
         this.takePickup(pickup);
+      }
+    }
+  }
+
+  private checkLethalThreatsAgainstPlayer(): void {
+    const bulletRadius = 10;
+    const missileRadius = 18;
+    const bullets = this.enemyBullets.getChildren() as Bullet[];
+    for (const bullet of bullets) {
+      if (!bullet.active || bullet.owner !== 'enemy') continue;
+      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, bullet.x, bullet.y) <= this.lethalPlayerRadius + bulletRadius) {
+        this.hitPlayer(bullet);
+        return;
+      }
+    }
+    const missiles = this.missiles.getChildren() as Missile[];
+    for (const missile of missiles) {
+      if (!missile.active || missile.owner !== 'enemy') continue;
+      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, missile.x, missile.y) <= this.lethalPlayerRadius + missileRadius) {
+        this.hitPlayer(missile);
+        return;
+      }
+    }
+    const enemies = this.enemies.getChildren() as Enemy[];
+    for (const enemy of enemies) {
+      if (!enemy.active) continue;
+      const enemyRadius = Math.max(enemy.displayWidth, enemy.displayHeight) * 0.42;
+      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y) <= this.lethalPlayerRadius + enemyRadius) {
+        this.hitPlayer(enemy);
+        return;
       }
     }
   }

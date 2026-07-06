@@ -28,10 +28,15 @@ export class HellChallengeScene extends Phaser.Scene {
   private missiles!: Phaser.Physics.Arcade.Group;
   private pickups!: Phaser.Physics.Arcade.Group;
   private startedAt = 0;
+  private pausedAt = 0;
+  private pausedMs = 0;
   private ended = false;
   private pauseLayer?: Phaser.GameObjects.Container;
   private scheduledWaveIndexes = new Set<number>();
   private scheduledHazardIndexes = new Set<number>();
+  private coreCleared = false;
+  private nextOvertimeHazardAt = 0;
+  private nextOvertimeWaveAt = 0;
 
   constructor() {
     super('HellChallengeScene');
@@ -39,6 +44,12 @@ export class HellChallengeScene extends Phaser.Scene {
 
   create(): void {
     this.ended = false;
+    this.coreCleared = false;
+    this.pausedAt = 0;
+    this.pausedMs = 0;
+    this.time.paused = false;
+    this.nextOvertimeHazardAt = 0;
+    this.nextOvertimeWaveAt = 0;
     this.scheduledWaveIndexes.clear();
     this.scheduledHazardIndexes.clear();
     this.game.canvas.focus();
@@ -69,7 +80,8 @@ export class HellChallengeScene extends Phaser.Scene {
       this.pickups,
       this.score,
       (x, y, big) => this.explode(x, y, big),
-      () => this.finish('defeat')
+      () => this.finish('defeat'),
+      { lethalPlayerHits: true, lethalPlayerRadius: 42 }
     );
     this.collisionSystem.bind();
     this.registerEvents();
@@ -86,7 +98,7 @@ export class HellChallengeScene extends Phaser.Scene {
     }
     if (this.physics.world.isPaused) return;
     this.background.tilePositionY -= 2.85 * (delta / 16.67);
-    const elapsed = time - this.startedAt;
+    const elapsed = this.getElapsedMs(time);
     this.player.updatePlayer(time, delta, { ...input, skillPressed: false }, this.playerBullets);
     this.updateTimeline(elapsed);
     this.enemies.children.each((child) => {
@@ -95,7 +107,8 @@ export class HellChallengeScene extends Phaser.Scene {
     });
     this.collisionSystem.update();
     this.updateHud(elapsed);
-    if (elapsed >= hellChallenge.durationMs) this.finish('victory');
+    if (elapsed >= hellChallenge.durationMs && !this.coreCleared) this.enterOvertime();
+    if (this.coreCleared) this.updateOvertime(elapsed);
   }
 
   private createGroups(): void {
@@ -114,9 +127,9 @@ export class HellChallengeScene extends Phaser.Scene {
       fontSize: '24px',
       color: '#ffdd86'
     }).setDepth(120);
-    this.countdownText = this.add.text(360, 54, '10.00', {
+    this.countdownText = this.add.text(360, 54, '剩余 10.00', {
       fontFamily: 'Arial',
-      fontSize: '54px',
+      fontSize: '46px',
       color: '#eafaff',
       fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(120);
@@ -238,10 +251,46 @@ export class HellChallengeScene extends Phaser.Scene {
 
   private updateHud(elapsed: number): void {
     const remaining = Math.max(0, hellChallenge.durationMs - elapsed);
-    this.countdownText.setText((remaining / 1000).toFixed(2));
-    this.countdownText.setColor(remaining <= 3000 ? '#ff5d6c' : '#eafaff');
+    this.countdownText.setText(this.coreCleared ? `生存 ${(elapsed / 1000).toFixed(2)}` : `剩余 ${(remaining / 1000).toFixed(2)}`);
+    this.countdownText.setColor(this.coreCleared || remaining <= 3000 ? '#ff5d6c' : '#eafaff');
     if (elapsed > 8000) {
       this.cameras.main.setBackgroundColor(Math.floor(elapsed / 140) % 2 === 0 ? '#17040a' : '#07101f');
+    }
+  }
+
+  private enterOvertime(): void {
+    this.coreCleared = true;
+    this.enemyBullets.clear(true, true);
+    this.missiles.clear(true, true);
+    this.nextOvertimeHazardAt = hellChallenge.durationMs + 720;
+    this.nextOvertimeWaveAt = hellChallenge.durationMs + 1200;
+    this.cameras.main.flash(260, 255, 245, 220, false);
+    this.soundSystem.play('ui');
+    const pass = this.add.text(360, 390, '10.00s 生还', {
+      fontFamily: 'Arial',
+      fontSize: '52px',
+      color: '#9cf7ff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(130);
+    this.tweens.add({ targets: pass, alpha: 0, y: 342, delay: 520, duration: 520, onComplete: () => pass.destroy() });
+  }
+
+  private updateOvertime(elapsed: number): void {
+    const level = Math.floor((elapsed - hellChallenge.durationMs) / 5000) + 1;
+    if (elapsed >= this.nextOvertimeHazardAt) {
+      this.nextOvertimeHazardAt = elapsed + Math.max(520, 1180 - level * 90);
+      const lane = Phaser.Math.RND.pick([110, 240, 360, 480, 610]);
+      if (level % 3 === 0) {
+        this.ringBurst(360, 250);
+      } else {
+        this.lockMissile(lane, Phaser.Math.Between(70, 190));
+      }
+    }
+    if (elapsed >= this.nextOvertimeWaveAt) {
+      this.nextOvertimeWaveAt = elapsed + Math.max(900, 1850 - level * 120);
+      const side = Phaser.Math.Between(0, 1) === 0 ? 120 : 600;
+      this.spawnEnemy('interceptor_drone', side);
+      this.spawnEnemy(level % 2 === 0 ? 'light_fighter' : 'patrol_drone', 720 - side);
     }
   }
 
@@ -256,11 +305,18 @@ export class HellChallengeScene extends Phaser.Scene {
   private togglePause(): void {
     const paused = this.physics.world.isPaused;
     if (paused) {
+      this.time.paused = false;
+      if (this.pausedAt > 0) {
+        this.pausedMs += Math.max(0, this.time.now - this.pausedAt);
+        this.pausedAt = 0;
+      }
       this.physics.resume();
       this.pauseLayer?.destroy();
       this.pauseLayer = undefined;
       return;
     }
+    this.pausedAt = this.time.now;
+    this.time.paused = true;
     this.physics.pause();
     const shade = this.add.rectangle(360, 640, 720, 1280, 0x02050a, 0.72);
     const text = this.add.text(360, 560, '已暂停', { fontFamily: 'Arial', fontSize: '52px', color: '#e8f8ff', fontStyle: 'bold' }).setOrigin(0.5);
@@ -274,13 +330,16 @@ export class HellChallengeScene extends Phaser.Scene {
   private finish(outcome: GameOutcome): void {
     if (this.ended) return;
     this.ended = true;
+    this.time.paused = false;
     this.soundSystem.stopMusic();
     this.physics.pause();
-    const elapsedMs = Math.min(this.time.now - this.startedAt, hellChallenge.durationMs);
+    const elapsedMs = this.getElapsedMs();
+    const cleared = elapsedMs >= hellChallenge.durationMs;
+    const resultOutcome: GameOutcome = outcome === 'victory' || cleared ? 'victory' : 'defeat';
     const previousBest = Number(localStorage.getItem('gulf-fireline-hell-best-ms') ?? 0);
     const bestMs = Math.max(previousBest, elapsedMs);
     localStorage.setItem('gulf-fireline-hell-best-ms', String(bestMs));
-    if (outcome === 'victory') {
+    if (resultOutcome === 'victory') {
       this.enemyBullets.clear(true, true);
       this.missiles.clear(true, true);
       this.cameras.main.flash(260, 255, 245, 220, false);
@@ -288,7 +347,7 @@ export class HellChallengeScene extends Phaser.Scene {
     }
     const rating = elapsedMs >= 10000 ? 'S' : elapsedMs >= 9000 ? 'A' : elapsedMs >= 6000 ? 'B' : 'C';
     const stats: ResultStats = {
-      outcome,
+      outcome: resultOutcome,
       mode: 'hell10',
       modeName: hellChallenge.displayName,
       retryScene: 'HellChallengeScene',
@@ -302,10 +361,16 @@ export class HellChallengeScene extends Phaser.Scene {
       elapsedMs,
       rating
     };
-    this.time.delayedCall(outcome === 'victory' ? 700 : 360, () => this.scene.start('ResultScene', stats));
+    this.time.delayedCall(resultOutcome === 'victory' ? 700 : 360, () => this.scene.start('ResultScene', stats));
+  }
+
+  private getElapsedMs(time = this.time.now): number {
+    const activePauseMs = this.pausedAt > 0 ? Math.max(0, time - this.pausedAt) : 0;
+    return Math.max(0, time - this.startedAt - this.pausedMs - activePauseMs);
   }
 
   private shutdown(): void {
+    this.time.paused = false;
     this.soundSystem?.destroy();
     this.events.removeAllListeners('enemy-fire');
     this.events.removeAllListeners('enemy-lock');

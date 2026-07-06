@@ -33,6 +33,8 @@ export class GameScene extends Phaser.Scene {
   private pickups!: Phaser.Physics.Arcade.Group;
   private boss?: Boss;
   private startedAt = 0;
+  private pausedAt = 0;
+  private pausedMs = 0;
   private ended = false;
   private pauseLayer?: Phaser.GameObjects.Container;
   private skillButton?: Phaser.GameObjects.Container;
@@ -44,6 +46,9 @@ export class GameScene extends Phaser.Scene {
 
   create(data?: { difficulty?: 'normal' | 'hard' }): void {
     this.ended = false;
+    this.pausedAt = 0;
+    this.pausedMs = 0;
+    this.time.paused = false;
     this.difficulty = data?.difficulty === 'hard' ? 'hard' : 'normal';
     this.game.canvas.focus();
     this.startedAt = this.time.now;
@@ -98,7 +103,7 @@ export class GameScene extends Phaser.Scene {
     const fired = this.player.updatePlayer(time, delta, input, this.playerBullets);
     if (fired && Math.floor(time / 120) % 2 === 0) this.soundSystem.play('playerFire');
     this.tryFirePlayerMissile(time);
-    const elapsed = time - this.startedAt;
+    const elapsed = this.getElapsedMs(time);
     this.spawnSystem.update(elapsed, this);
     this.enemies.children.each((child) => {
       (child as Enemy).updateEnemy(time, this.enemyBullets, this.missiles, this.player);
@@ -283,11 +288,18 @@ export class GameScene extends Phaser.Scene {
   private togglePause(): void {
     const paused = this.physics.world.isPaused;
     if (paused) {
+      this.time.paused = false;
+      if (this.pausedAt > 0) {
+        this.pausedMs += Math.max(0, this.time.now - this.pausedAt);
+        this.pausedAt = 0;
+      }
       this.physics.resume();
       this.pauseLayer?.destroy();
       this.pauseLayer = undefined;
       return;
     }
+    this.pausedAt = this.time.now;
+    this.time.paused = true;
     this.physics.pause();
     const shade = this.add.rectangle(360, 640, 720, 1280, 0x02050a, 0.68);
     const text = this.add.text(360, 560, '已暂停', { fontFamily: 'Arial', fontSize: '52px', color: '#e8f8ff', fontStyle: 'bold' }).setOrigin(0.5);
@@ -301,9 +313,10 @@ export class GameScene extends Phaser.Scene {
   private finish(outcome: GameOutcome): void {
     if (this.ended) return;
     this.ended = true;
+    this.time.paused = false;
     this.soundSystem.stopMusic();
     this.physics.pause();
-    const elapsedMs = this.time.now - this.startedAt;
+    const elapsedMs = this.getElapsedMs();
     const rating = outcome === 'victory' ? this.score.rating(this.player.hp, elapsedMs) : 'C';
     const previousBest = Number(localStorage.getItem('gulf-fireline-best') ?? 0);
     const bestScore = Math.max(previousBest, this.score.score);
@@ -327,7 +340,13 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(600, () => this.scene.start('ResultScene', stats));
   }
 
+  private getElapsedMs(time = this.time.now): number {
+    const activePauseMs = this.pausedAt > 0 ? Math.max(0, time - this.pausedAt) : 0;
+    return Math.max(0, time - this.startedAt - this.pausedMs - activePauseMs);
+  }
+
   private shutdown(): void {
+    this.time.paused = false;
     this.soundSystem?.destroy();
     this.events.removeAllListeners('enemy-fire');
     this.events.removeAllListeners('enemy-lock');
