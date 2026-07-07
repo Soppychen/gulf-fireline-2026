@@ -27,9 +27,7 @@ export class HellChallengeScene extends Phaser.Scene {
   private enemies!: Phaser.Physics.Arcade.Group;
   private missiles!: Phaser.Physics.Arcade.Group;
   private pickups!: Phaser.Physics.Arcade.Group;
-  private startedAt = 0;
-  private pausedAt = 0;
-  private pausedMs = 0;
+  private survivalMs = 0;
   private ended = false;
   private pauseLayer?: Phaser.GameObjects.Container;
   private scheduledWaveIndexes = new Set<number>();
@@ -45,15 +43,13 @@ export class HellChallengeScene extends Phaser.Scene {
   create(): void {
     this.ended = false;
     this.coreCleared = false;
-    this.pausedAt = 0;
-    this.pausedMs = 0;
+    this.survivalMs = 0;
     this.time.paused = false;
     this.nextOvertimeHazardAt = 0;
     this.nextOvertimeWaveAt = 0;
     this.scheduledWaveIndexes.clear();
     this.scheduledHazardIndexes.clear();
     this.game.canvas.focus();
-    this.startedAt = this.time.now;
     this.soundSystem = new SoundSystem(this);
     this.soundSystem.unlock();
     this.soundSystem.startMusic('boss');
@@ -63,10 +59,11 @@ export class HellChallengeScene extends Phaser.Scene {
     this.player = new Player(this, 360, 1090);
     this.player.hp = 1;
     this.player.weaponLevel = 2;
+    this.player.speedMultiplier = 1.32;
     this.player.missileAmmo = 0;
     this.player.skillReadyAt = Number.POSITIVE_INFINITY;
     this.add.image(this.player.x, this.player.y, 'fx_sheet', 'fx_player_shield').setName('player_shield').setDepth(29).setDisplaySize(98, 98).setVisible(false);
-    this.inputSystem = new InputSystem(this);
+    this.inputSystem = new InputSystem(this, { pointerFollowOffsetY: 118 });
     this.createGroups();
     this.createHud();
     this.collisionSystem = new CollisionSystem(
@@ -97,8 +94,10 @@ export class HellChallengeScene extends Phaser.Scene {
       return;
     }
     if (this.physics.world.isPaused) return;
-    this.background.tilePositionY -= 2.85 * (delta / 16.67);
-    const elapsed = this.getElapsedMs(time);
+    const frameMs = Math.min(delta, 50);
+    this.survivalMs += frameMs;
+    this.background.tilePositionY -= 2.85 * (frameMs / 16.67);
+    const elapsed = this.survivalMs;
     this.player.updatePlayer(time, delta, { ...input, skillPressed: false }, this.playerBullets);
     this.updateTimeline(elapsed);
     this.enemies.children.each((child) => {
@@ -306,16 +305,11 @@ export class HellChallengeScene extends Phaser.Scene {
     const paused = this.physics.world.isPaused;
     if (paused) {
       this.time.paused = false;
-      if (this.pausedAt > 0) {
-        this.pausedMs += Math.max(0, this.time.now - this.pausedAt);
-        this.pausedAt = 0;
-      }
       this.physics.resume();
       this.pauseLayer?.destroy();
       this.pauseLayer = undefined;
       return;
     }
-    this.pausedAt = this.time.now;
     this.time.paused = true;
     this.physics.pause();
     const shade = this.add.rectangle(360, 640, 720, 1280, 0x02050a, 0.72);
@@ -333,7 +327,7 @@ export class HellChallengeScene extends Phaser.Scene {
     this.time.paused = false;
     this.soundSystem.stopMusic();
     this.physics.pause();
-    const elapsedMs = this.getElapsedMs();
+    const elapsedMs = this.survivalMs;
     const cleared = elapsedMs >= hellChallenge.durationMs;
     const resultOutcome: GameOutcome = outcome === 'victory' || cleared ? 'victory' : 'defeat';
     const previousBest = Number(localStorage.getItem('gulf-fireline-hell-best-ms') ?? 0);
@@ -362,11 +356,6 @@ export class HellChallengeScene extends Phaser.Scene {
       rating
     };
     this.time.delayedCall(resultOutcome === 'victory' ? 700 : 360, () => this.scene.start('ResultScene', stats));
-  }
-
-  private getElapsedMs(time = this.time.now): number {
-    const activePauseMs = this.pausedAt > 0 ? Math.max(0, time - this.pausedAt) : 0;
-    return Math.max(0, time - this.startedAt - this.pausedMs - activePauseMs);
   }
 
   private shutdown(): void {

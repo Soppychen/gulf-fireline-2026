@@ -64,7 +64,7 @@ export class GameScene extends Phaser.Scene {
       this.player.weaponLevel = 2;
     }
     this.add.image(this.player.x, this.player.y, 'fx_sheet', 'fx_player_shield').setName('player_shield').setDepth(29).setDisplaySize(118, 118).setVisible(false);
-    this.inputSystem = new InputSystem(this);
+    this.inputSystem = new InputSystem(this, { pointerFollowOffsetY: 104 });
     this.createGroups();
     this.hud = new Hud(this);
     this.spawnSystem = new SpawnSystem(stage01, (kind, x) => this.spawnEnemy(kind, x), (kind, x, y) => this.spawnPickup(kind, x, y), () => this.spawnBoss());

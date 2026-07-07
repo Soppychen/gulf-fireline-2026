@@ -13,6 +13,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   shieldUntil = 0;
   invincibleUntil = 0;
   skillReadyAt = 0;
+  speedMultiplier = 1;
   private nextShotAt = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -30,7 +31,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   updatePlayer(time: number, delta: number, input: InputState, bullets: Phaser.Physics.Arcade.Group): boolean {
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const speed = input.focus ? aircraft.afx35.focusSpeed : aircraft.afx35.speed;
+    const speed = (input.focus ? aircraft.afx35.focusSpeed : aircraft.afx35.speed) * this.speedMultiplier;
     if (input.pointerWorld) {
       const dx = input.pointerWorld.x - this.x;
       const dy = input.pointerWorld.y - this.y;

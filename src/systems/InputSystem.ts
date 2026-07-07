@@ -17,7 +17,10 @@ export class InputSystem {
   private wasSkillDown = false;
   private wasPauseDown = false;
 
-  constructor(private readonly scene: Phaser.Scene) {
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly options: { pointerFollowOffsetY?: number } = {}
+  ) {
     this.cursors = scene.input.keyboard!.createCursorKeys();
     this.keys = scene.input.keyboard!.addKeys('W,A,S,D,SHIFT,SPACE,ESC,P') as Record<string, Phaser.Input.Keyboard.Key>;
     scene.input.keyboard!.addCapture(['UP', 'DOWN', 'LEFT', 'RIGHT', 'W', 'A', 'S', 'D', 'SHIFT', 'SPACE', 'ESC', 'P']);
@@ -39,7 +42,9 @@ export class InputSystem {
     const down = this.cursors.down.isDown || this.keys.S.isDown || this.isDown('arrowdown', 's');
     const skillDown = this.keys.SPACE.isDown || this.isDown(' ');
     const pauseDown = this.keys.ESC.isDown || this.keys.P.isDown || this.isDown('escape', 'p');
-    const pointerWorld = this.pointer?.isDown ? new Phaser.Math.Vector2(this.pointer.x, this.pointer.y) : undefined;
+    const pointerWorld = this.pointer?.isDown
+      ? new Phaser.Math.Vector2(this.pointer.x, this.pointer.y - (this.options.pointerFollowOffsetY ?? 0))
+      : undefined;
     const state: InputState = {
       moveX: Number(right) - Number(left),
       moveY: Number(down) - Number(up),
