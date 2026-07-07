@@ -59,7 +59,7 @@ export class HellChallengeScene extends Phaser.Scene {
     this.player = new Player(this, 360, 1090);
     this.player.hp = 1;
     this.player.weaponLevel = 2;
-    this.player.speedMultiplier = 1.32;
+    this.player.speedMultiplier = 1.5;
     this.player.missileAmmo = 0;
     this.player.skillReadyAt = Number.POSITIVE_INFINITY;
     this.add.image(this.player.x, this.player.y, 'fx_sheet', 'fx_player_shield').setName('player_shield').setDepth(29).setDisplaySize(98, 98).setVisible(false);
