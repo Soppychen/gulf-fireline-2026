@@ -59,10 +59,11 @@ export class HellChallengeScene extends Phaser.Scene {
     this.player = new Player(this, 360, 1090);
     this.player.hp = 1;
     this.player.weaponLevel = 2;
-    this.player.speedMultiplier = 1.5;
+    this.player.speedMultiplier = 2;
+    this.player.setDisplaySize(66, 78);
     this.player.missileAmmo = 0;
     this.player.skillReadyAt = Number.POSITIVE_INFINITY;
-    this.add.image(this.player.x, this.player.y, 'fx_sheet', 'fx_player_shield').setName('player_shield').setDepth(29).setDisplaySize(98, 98).setVisible(false);
+    this.add.image(this.player.x, this.player.y, 'fx_sheet', 'fx_player_shield').setName('player_shield').setDepth(29).setDisplaySize(78, 78).setVisible(false);
     this.inputSystem = new InputSystem(this, { pointerFollowOffsetY: 118 });
     this.createGroups();
     this.createHud();
@@ -78,7 +79,7 @@ export class HellChallengeScene extends Phaser.Scene {
       this.score,
       (x, y, big) => this.explode(x, y, big),
       () => this.finish('defeat'),
-      { lethalPlayerHits: true, lethalPlayerRadius: 42 }
+      { lethalPlayerHits: true, lethalPlayerRadius: 34 }
     );
     this.collisionSystem.bind();
     this.registerEvents();
